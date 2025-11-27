@@ -1,5 +1,4 @@
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const express = require("express");
 const cors = require("cors");
 const app = express();
@@ -7,12 +6,13 @@ require("dotenv").config();
 const port = process.env.PORT || 3000;
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.6jar5hr.mongodb.net/?appName=Cluster0`;
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const YOUR_DOMAIN = "http://localhost:5173";
 
 //middleware
 app.use(express.json());
-app.use(cors());c
+app.use(cors());
 
 // Create a MongoClient
 const client = new MongoClient(uri, {
