@@ -66,41 +66,80 @@ async function run() {
 
     //payment-api-------------------->
     app.post("/create-checkout-session", async (req, res) => {
-  try {
-    const paymentInfo = req.body;
-    
-    if (!paymentInfo.cost || !paymentInfo.parcelName || !paymentInfo.senderEmail) {
-      return res.status(400).send({ error: "Missing required fields" });
-    }
+      try {
+        const paymentInfo = req.body;
 
-    const amount = parseInt(paymentInfo.cost) * 100;  // cents
+        if (
+          !paymentInfo.cost ||
+          !paymentInfo.parcelName ||
+          !paymentInfo.senderEmail
+        ) {
+          return res.status(400).send({ error: "Missing required fields" });
+        }
 
-    const session = await stripe.checkout.sessions.create({
-      line_items: [
-        {
-          price_data: {
-            currency: "BDT",   // USD or BDT
-            unit_amount: amount,
-            product_data: {
-              name: paymentInfo.parcelName,
+        const amount = parseInt(paymentInfo.cost) * 100; // cents
+
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "BDT", // USD or BDT
+                unit_amount: amount,
+                product_data: {
+                  name: paymentInfo.parcelName,
+                },
+              },
+              quantity: 1,
             },
+          ],
+          customer_email: paymentInfo.senderEmail,
+          mode: "payment",
+          metadata: {
+            parcelId: paymentInfo.parcelId,
           },
-          quantity: 1,
-        },
-      ],
-      customer_email: paymentInfo.senderEmail,
-      mode: "payment",
-      success_url: `${YOUR_DOMAIN}/dashboard/payment-success`,
-      cancel_url: `${YOUR_DOMAIN}/dashboard/payment-cancel`,
+          success_url: `${YOUR_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${YOUR_DOMAIN}/dashboard/payment-cancel`,
+        });
+
+        res.send({ url: session.url }); // JSON response for frontend
+      } catch (error) {
+        console.log(error);
+        res.status(500).send({ error: error.message });
+      }
     });
 
-    res.send({ url: session.url });  // JSON response for frontend
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({ error: error.message });
-  }
-});
+    //payment-check
+    app.patch("/payment-success", async (req, res) => {
+      try {
+        const sessionId = req.query.session_id;
 
+        if (!sessionId) {
+          return res.status(400).send({ error: "session_id missing" });
+        }
+
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        if (session.payment_status === "paid") {
+          const id = session.metadata.parcelId;
+          const query = { _id: new ObjectId(id) };
+
+          const update = {
+            $set: { status: "paid" },
+          };
+
+          const result = await parcelsCollection.updateOne(query, update);
+          return res.send({ success: true, result });
+        } else {
+          return res.status(400).send({
+            success: false,
+            message: "Payment not paid yet",
+          });
+        }
+      } catch (error) {
+        console.error("Payment success error:", error);
+        res.status(500).send({ error: error.message });
+      }
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
